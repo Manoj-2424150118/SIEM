@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import subprocess
 import re
 import logging
+import requests
 from logging.handlers import RotatingFileHandler
 import ipaddress
 import os
@@ -64,6 +65,32 @@ def tines_webhook():
         return jsonify({"error": "Invalid IP format"}), 400
         
     logger.info(f"Received authenticated request to block IP: {malicious_ip}")
+    
+    # --- PHASE 6: NATIVE THREAT INTELLIGENCE VERIFICATION ---
+    vt_api_key = os.getenv("VIRUSTOTAL_API_KEY")
+    if vt_api_key:
+        logger.info(f"Querying VirusTotal API to verify IP: {malicious_ip}")
+        try:
+            vt_response = requests.get(
+                f"https://www.virustotal.com/api/v3/ip_addresses/{malicious_ip}",
+                headers={"x-apikey": vt_api_key},
+                timeout=5
+            )
+            if vt_response.status_code == 200:
+                stats = vt_response.json().get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+                malicious_score = stats.get('malicious', 0)
+                if malicious_score == 0:
+                    logger.warning(f"VirusTotal reported 0 malicious hits for {malicious_ip}. Block aborted (False Positive).")
+                    return jsonify({"status": "aborted", "message": f"IP {malicious_ip} was deemed safe by VirusTotal"}), 200
+                else:
+                    logger.info(f"VirusTotal confirmed {malicious_ip} is malicious (Score: {malicious_score}). Proceeding with block.")
+            else:
+                logger.warning(f"VirusTotal API returned {vt_response.status_code}. Bypassing verification.")
+        except Exception as e:
+            logger.error(f"VirusTotal API request failed: {e}. Bypassing verification.")
+    else:
+        logger.info("VIRUSTOTAL_API_KEY not found in .env. Skipping threat intelligence verification.")
+    # --------------------------------------------------------
     
     try:
         # Execute netsh command to block the IP via Windows Firewall

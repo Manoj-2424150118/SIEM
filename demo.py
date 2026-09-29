@@ -22,7 +22,8 @@ def run_demo():
         server_thread.start()
         time.sleep(2) # Give the Flask server time to start
         
-        target_ip = "192.168.1.200"
+        # We use a famously malicious botnet IP here so VirusTotal flags it and triggers our Telegram alert!
+        target_ip = "185.220.101.5"
         
         # 2. Run the attack simulator
         print("\n[2] Attacker is initiating an SSH Brute Force Attack...")

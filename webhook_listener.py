@@ -112,17 +112,24 @@ def tines_webhook():
         # --- PHASE 7: AUTOMATED TEAM ALERTS ---
         discord_url = os.getenv("DISCORD_WEBHOOK_URL")
         slack_url = os.getenv("SLACK_WEBHOOK_URL")
+        telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
         
         vt_text = f" (VirusTotal Score: {malicious_score})" if 'malicious_score' in locals() else ""
-        alert_msg = f"🚨 **THREAT BLOCKED** 🚨\n**IP Address:** `{malicious_ip}`\n**Action:** Automatically added to Windows Firewall Blocklist.{vt_text}"
+        alert_msg = f"🚨 *THREAT BLOCKED* 🚨\n*IP Address:* `{malicious_ip}`\n*Action:* Automatically added to Windows Firewall Blocklist.{vt_text}"
         
         try:
             if discord_url:
-                requests.post(discord_url, json={"content": alert_msg}, timeout=3)
+                requests.post(discord_url, json={"content": alert_msg.replace('*', '**')}, timeout=3)
                 logger.info("Alert dispatched to Discord.")
             elif slack_url:
                 requests.post(slack_url, json={"text": alert_msg}, timeout=3)
                 logger.info("Alert dispatched to Slack.")
+            
+            if telegram_token and telegram_chat_id:
+                tg_url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
+                requests.post(tg_url, json={"chat_id": telegram_chat_id, "text": alert_msg, "parse_mode": "Markdown"}, timeout=3)
+                logger.info("Alert dispatched to Telegram.")
         except Exception as e:
             logger.error(f"Failed to dispatch team alert: {e}")
         # ---------------------------------------

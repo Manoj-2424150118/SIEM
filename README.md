@@ -1,82 +1,85 @@
 # Automated Threat Hunting & Incident Response Pipeline
 
-This project implements a fully automated, closed-loop SIEM to SOAR pipeline. When an attacker attempts to brute force SSH, the system automatically detects the threat, verifies the IP against Threat Intelligence (VirusTotal), alerts the team via Slack, and actively blocks the attacker using local firewall rules.
+This project implements a fully automated, closed-loop SIEM to SOAR pipeline designed for real-world environments. When an attacker attempts a brute-force or malicious action, the system automatically detects the threat, verifies the IP natively against Threat Intelligence (VirusTotal) to prevent false positives, actively blocks the attacker using Windows Firewall, and alerts the security team via Telegram/Slack/Discord.
 
-## Project Structure
+## 🌟 Key Features
 
-- `attack_simulator.py`: Python script to simulate SSH brute force attacks to trigger your detection rules.
-- `webhook_listener.py`: Flask-based webhook listener acting as the "Active Defense" node to receive SOAR instructions and block the malicious IP via `ufw`.
-- `requirements.txt`: Python dependencies needed for the scripts.
+1. **Automated Docker SIEM Setup**: 1-click deployment of an Elastic Stack (Elasticsearch & Kibana) using Docker Compose.
+2. **Production-Ready Active Defense Node**: A hardened Waitress-based WSGI Python server (`webhook_listener.py`) serving as a local API to orchestrate firewall rules.
+3. **Secure API Key Authentication**: Rejects unauthorized access attempts natively.
+4. **Stress Tested Load Balancing**: Safely queues concurrent tasks to prevent the Windows Firewall (`netsh`) from crashing under heavy botnet traffic.
+5. **Secure Public Tunneling**: Automatically exposes the local node to the cloud (Tines) using a secure Pyngrok tunnel.
+6. **Native Threat Intelligence**: Directly integrates with the VirusTotal API inside the Python webhook to abort blocks on safe IPs (False Positive prevention).
+7. **Automated Team Alerts**: Dispatches rich, Markdown-formatted incident reports to Telegram, Slack, or Discord the moment an IP is successfully blocked.
 
-## Setup Instructions
+---
 
-### Phase 1: Infrastructure Preparation (Linux VM)
+## 🛠️ Project Structure
 
-1. Provision a Linux VM (Ubuntu recommended). This will be both the "victim" and the active defense node.
-2. Clone this folder/files onto the VM.
-3. Install dependencies:
-   ```bash
-   pip3 install -r requirements.txt
-   ```
-4. Start the Active Defense webhook listener on the VM:
-   ```bash
-   python3 webhook_listener.py
-   ```
-   *Ensure port 5000 is open in your cloud provider's network security group.*
+- `start_siem.bat`: 1-click execution script that installs dependencies, spins up Docker, and launches the Active Defense node.
+- `start_tunnel.py`: Initializes the Pyngrok secure cloud tunnel.
+- `webhook_listener.py`: The core Active Defense Node that processes blocks, checks VirusTotal, and sends Team Alerts.
+- `attack_simulator.py`: Simulates SSH brute force attacks to trigger SIEM detection rules.
+- `stress_test.py`: Fires 50 concurrent authenticated requests to benchmark the server's load-handling capabilities.
+- `demo.py`: Fully automates a mock pipeline sequence for instant demonstrations.
+- `docker-compose.yml`: Local Elastic SIEM infrastructure.
 
-### Phase 2: SIEM Setup (Elastic Security)
+---
 
-1. Deploy Elastic Cloud.
-2. Use **Integrations** in Elastic to deploy an **Elastic Agent** onto your Linux VM. Select the "System" integration to ensure auth logs (`/var/log/auth.log`) are ingested.
-3. Once data is flowing, go to **Rules** -> **Create new rule** in Elastic Security.
-   - **Rule Type**: Custom Query
-   - **Index**: `logs-*` or `logs-system.auth-*`
-   - **Query**: `event.action: "ssh_login" AND outcome: "failure"`
-   - **Threshold**: When query results > 5 from the same `source.ip` within 5 minutes.
-4. Under **Actions**, create a new **Webhook Connector** pointing to the URL you'll generate in Phase 3.
+## 🚀 1-Click Setup Guide
 
-### Phase 3: SOAR Configuration (Tines)
+### 1. Configure the `.env` file
+Create a `.env` file in the root directory. You will need to provide the following API keys:
+```env
+# Required for SOAR authentication (Auto-generated on first run if missing)
+WEBHOOK_API_KEY=your_generated_secret_key
 
-Sign up for Tines Community Edition and build your Storyboard with the following components connected sequentially:
+# Phase 5: Tunneling (Get from ngrok.com)
+NGROK_AUTH_TOKEN=your_ngrok_token
 
-1. **Webhook (Trigger)**
-   - Drag a Webhook action. Copy the provided URL.
-   - Paste this URL into your Elastic Security Rule Action from Phase 2.
-2. **Event Transformation (Parse JSON)**
-   - Name it "Extract Malicious IP".
-   - Use Tines formulas to parse the Elastic payload and grab the attacker's source IP.
-3. **HTTP Request (VirusTotal Intel)**
-   - URL: `https://www.virustotal.com/api/v3/ip_addresses/<<ip_variable>>`
-   - Headers: `x-apikey: YOUR_VIRUSTOTAL_API_KEY`
-4. **Trigger (Decision Logic)**
-   - Add a Trigger action that inspects the output of the VirusTotal HTTP request.
-   - Rules: `last_analysis_stats.malicious` is greater than `0`.
-5. **HTTP Request (Slack Alert)**
-   - URL: Your Slack Incoming Webhook URL.
-   - Method: POST
-   - Payload:
-     ```json
-     {
-       "text": "🚨 *High Severity Alert* 🚨\nBrute force detected from IP: <<ip_variable>>.\nVirusTotal Malicious Score: <<score>>.\nAction taken: Automated Block initiated."
-     }
-     ```
-6. **HTTP Request (Active Defense - Block IP)**
-   - URL: `http://<YOUR_VM_PUBLIC_IP>:5000/webhook`
-   - Method: POST
-   - Content-Type: `application/json`
-   - Payload:
-     ```json
-     {
-       "ip": "<<ip_variable>>"
-     }
-     ```
+# Phase 6: Threat Intelligence (Get from virustotal.com)
+VIRUSTOTAL_API_KEY=your_virustotal_token
 
-### Testing the Pipeline
-
-Once everything is connected, use the `attack_simulator.py` script from another machine (or even locally) to trigger the alerts:
-
-```bash
-python3 attack_simulator.py --target <YOUR_VM_IP> --user root --count 10
+# Phase 7: Team Alerts (Optional)
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_CHAT_ID=your_telegram_chat_id
+# SLACK_WEBHOOK_URL=https://...
+# DISCORD_WEBHOOK_URL=https://...
 ```
 
-Watch the Elastic SIEM register the failures, Tines orchestrate the intel lookup and Slack notification, and finally the `webhook_listener.py` successfully block the IP using UFW!
+### 2. Start the Environment
+If you are on Windows, simply double click the `start_siem.bat` file! 
+This script will request Administrator privileges (required to modify the Windows firewall), verify your Python installation, automatically install all requirements, start the Elastic docker containers, and launch the Active Defense Node in a new window.
+
+### 3. Expose the Webhook
+Run the tunneling script to securely expose your Webhook to the public internet so cloud-based SOARs (like Tines) can reach it:
+```bash
+python start_tunnel.py
+```
+Copy the generated `https://xyz.ngrok-free.app` URL.
+
+---
+
+## 🔗 Linking the SOAR (Tines)
+
+1. Sign up for Tines Community Edition.
+2. Drag an **HTTP Request** action onto your Storyboard. 
+3. Configure it to point to your Active Defense Node:
+   - **URL**: `https://<YOUR_NGROK_URL>/webhook`
+   - **Method**: POST
+   - **Headers**: `x-api-key: YOUR_WEBHOOK_API_KEY`
+   - **Payload**: `{"ip": "<<event.body.source.ip>>"}`
+
+When Tines triggers, it will hit your local Python server. The Python server will automatically query VirusTotal, verify the IP is malicious, block it in the Windows Firewall, and send you a Telegram alert!
+
+## 🧪 Testing
+
+To view a fully automated demonstration of the entire pipeline, simply run:
+```bash
+python demo.py
+```
+
+To stress test the Active Defense Node with concurrent attacks:
+```bash
+python stress_test.py
+```

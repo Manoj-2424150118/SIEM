@@ -93,9 +93,18 @@ def tines_webhook():
     # --------------------------------------------------------
     
     try:
+        rule_name = f"Block IP {malicious_ip} from SIEM Webhook"
+        
+        # --- MISSING PIECE 4: Prevent duplicate firewall rules ---
+        check_cmd = ["netsh", "advfirewall", "firewall", "show", "rule", f"name={rule_name}"]
+        check_result = subprocess.run(check_cmd, capture_output=True, text=True)
+        if "No rules match" not in check_result.stdout:
+            logger.info(f"Firewall rule for {malicious_ip} already exists. Skipping duplicate.")
+            return jsonify({"status": "skipped", "message": f"Rule for {malicious_ip} already exists"}), 200
+        # ---------------------------------------------------------
+        
         # Execute netsh command to block the IP via Windows Firewall
         # We use a list for subprocess to prevent shell injection vulnerabilities
-        rule_name = f"Block IP {malicious_ip} from SIEM Webhook"
         command = [
             "netsh", "advfirewall", "firewall", "add", "rule",
             f"name={rule_name}",

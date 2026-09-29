@@ -3,10 +3,27 @@ import paramiko
 import threading
 import time
 
+import logging
+import os
+
+# Set up file logging for the SIEM to read
+if not os.path.exists('logs'):
+    os.makedirs('logs')
+logging.basicConfig(
+    filename='logs/auth.log', 
+    level=logging.INFO, 
+    format='%(asctime)s - HONEYPOT - %(message)s'
+)
+
 class FakeSSHServer(paramiko.ServerInterface):
+    def __init__(self, client_ip):
+        self.client_ip = client_ip
+        
     def check_auth_password(self, username, password):
-        # Always fail authentication to simulate brute force logging
-        print(f"[-] HONEYPOT: Failed password for {username} with password '{password}'")
+        # Log the critical missing piece: The attacker's IP Address!
+        log_msg = f"Failed password for {username} from {self.client_ip} port 22 ssh2"
+        print(f"[-] {log_msg}")
+        logging.info(log_msg)
         return paramiko.AUTH_FAILED
     
     def get_allowed_auths(self, username):
@@ -32,7 +49,8 @@ def start_honeypot():
     def handle_client(client, addr):
         transport = paramiko.Transport(client)
         transport.add_server_key(host_key)
-        server = FakeSSHServer()
+        # Pass the IP address into the server so it can be logged!
+        server = FakeSSHServer(addr[0])
         try:
             transport.start_server(server=server)
             # Wait for auth to fail

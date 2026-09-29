@@ -2,4 +2,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 .env
+.env
 INTERVIEW_GUIDE.md
+*.log

@@ -9,7 +9,7 @@ import ctypes
 
 # Add parent directory to path so we can import the app
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from webhook_listener import app
+from webhook_listener import app, API_KEY
 
 class WebhookTest(unittest.TestCase):
     @classmethod
@@ -28,8 +28,9 @@ class WebhookTest(unittest.TestCase):
         rule_name = f"Block IP {test_ip} from SIEM Webhook"
         
         try:
-            # Send the payload to the webhook
-            response = requests.post('http://127.0.0.1:5001/webhook', json={'ip': test_ip})
+            # Send the payload to the webhook with auth
+            headers = {'x-api-key': API_KEY}
+            response = requests.post('http://127.0.0.1:5001/webhook', json={'ip': test_ip}, headers=headers)
             self.assertEqual(response.status_code, 200)
             self.assertIn("blocked via Windows Firewall", response.json().get('message', ''))
             
@@ -49,15 +50,28 @@ class WebhookTest(unittest.TestCase):
 
     def test_invalid_ip_format(self):
         """Test that sending an invalid IP format is rejected."""
-        response = requests.post('http://127.0.0.1:5001/webhook', json={'ip': 'not_an_ip'})
+        headers = {'x-api-key': API_KEY}
+        response = requests.post('http://127.0.0.1:5001/webhook', json={'ip': 'not_an_ip'}, headers=headers)
         self.assertEqual(response.status_code, 400)
         self.assertIn("Invalid IP format", response.json().get('error', ''))
 
     def test_missing_ip_field(self):
         """Test that missing the IP field entirely is rejected."""
-        response = requests.post('http://127.0.0.1:5001/webhook', json={'something_else': '123'})
+        headers = {'x-api-key': API_KEY}
+        response = requests.post('http://127.0.0.1:5001/webhook', json={'something_else': '123'}, headers=headers)
         self.assertEqual(response.status_code, 400)
         self.assertIn("Invalid payload", response.json().get('error', ''))
+        
+    def test_unauthorized_access(self):
+        """Test that missing or invalid API keys result in 401 Unauthorized."""
+        # No headers
+        response1 = requests.post('http://127.0.0.1:5001/webhook', json={'ip': '1.1.1.1'})
+        self.assertEqual(response1.status_code, 401)
+        
+        # Bad API key
+        headers = {'x-api-key': 'fake_key'}
+        response2 = requests.post('http://127.0.0.1:5001/webhook', json={'ip': '1.1.1.1'}, headers=headers)
+        self.assertEqual(response2.status_code, 401)
 
 if __name__ == '__main__':
     unittest.main()

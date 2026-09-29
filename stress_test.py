@@ -2,7 +2,22 @@ import concurrent.futures
 import requests
 import time
 import subprocess
+import ctypes
+import sys
+import random
 from webhook_listener import API_KEY
+
+def is_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+if not is_admin():
+    print("[!] Administrator privileges required to clean up firewall rules.")
+    print("    Requesting elevation...")
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
+    sys.exit()
 
 def send_request(ip):
     """Send an authenticated POST request to the webhook"""
@@ -17,10 +32,10 @@ def run_stress_test(num_requests=50):
     print("\n" + "="*60)
     print(f"🔥 PHASE 3: STRESS TESTING ACTIVE DEFENSE ({num_requests} CONCURRENT ALERTS) 🔥")
     print("="*60 + "\n")
-    print(f"[*] Simulating a massive burst of alerts from the SOAR...")
+    print(f"[*] Simulating a massive burst of alerts from a globally distributed botnet...")
     
-    # Generate dummy IPs to block
-    ips = [f"10.0.0.{i}" for i in range(1, num_requests + 1)]
+    # Dynamically generate 50 completely random public IP addresses to mimic a real botnet
+    ips = [f"{random.randint(11, 254)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}" for _ in range(num_requests)]
     
     start_time = time.time()
     

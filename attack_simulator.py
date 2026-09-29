@@ -34,8 +34,19 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    # Generate some dummy passwords
-    dummy_passwords = [f"password123_{i}" for i in range(args.count)]
+    # Real-world IoT Botnet Dictionary (Mirai/Bashlite common passwords)
+    real_world_dictionary = [
+        "123456", "password", "admin", "admin123", "root",
+        "12345", "12345678", "qwerty", "111111", "support",
+        "changeme", "default", "guest", "ubuntu", "raspberry"
+    ]
     
-    simulate_brute_force(args.target, args.user, dummy_passwords)
+    # We slice the list to the requested count to simulate the attack
+    attack_passwords = real_world_dictionary[:args.count]
+    
+    # If the user requests more passwords than our mini dictionary, we pad it out
+    while len(attack_passwords) < args.count:
+        attack_passwords.append(f"brute_force_{len(attack_passwords)}")
+        
+    simulate_brute_force(args.target, args.user, attack_passwords)
     print("\n[*] Simulation complete. Check your SIEM for auth failure logs.")

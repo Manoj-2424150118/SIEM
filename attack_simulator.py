@@ -12,8 +12,8 @@ def simulate_brute_force(target_ip, target_user, passwords):
         
         try:
             print(f"[*] Attempting password: {password}")
-            # The goal is to generate auth failures, so we expect this to fail
-            client.connect(target_ip, username=target_user, password=password, timeout=3)
+            # The goal is to generate auth failures against our local Honeypot (port 2222)
+            client.connect(target_ip, port=2222, username=target_user, password=password, timeout=3)
             print(f"[+] Success! Wait, this wasn't supposed to happen with password: {password}")
             client.close()
         except paramiko.AuthenticationException:

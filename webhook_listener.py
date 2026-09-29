@@ -108,6 +108,25 @@ def tines_webhook():
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         
         logger.info(f"Successfully blocked {malicious_ip}. Output: {result.stdout.strip()}")
+        
+        # --- PHASE 7: AUTOMATED TEAM ALERTS ---
+        discord_url = os.getenv("DISCORD_WEBHOOK_URL")
+        slack_url = os.getenv("SLACK_WEBHOOK_URL")
+        
+        vt_text = f" (VirusTotal Score: {malicious_score})" if 'malicious_score' in locals() else ""
+        alert_msg = f"🚨 **THREAT BLOCKED** 🚨\n**IP Address:** `{malicious_ip}`\n**Action:** Automatically added to Windows Firewall Blocklist.{vt_text}"
+        
+        try:
+            if discord_url:
+                requests.post(discord_url, json={"content": alert_msg}, timeout=3)
+                logger.info("Alert dispatched to Discord.")
+            elif slack_url:
+                requests.post(slack_url, json={"text": alert_msg}, timeout=3)
+                logger.info("Alert dispatched to Slack.")
+        except Exception as e:
+            logger.error(f"Failed to dispatch team alert: {e}")
+        # ---------------------------------------
+        
         return jsonify({"status": "success", "message": f"IP {malicious_ip} blocked via Windows Firewall"}), 200
         
     except subprocess.CalledProcessError as e:

@@ -28,17 +28,6 @@ services:
     depends_on:
       - elasticsearch
 
-  filebeat:
-    image: docker.elastic.co/beats/filebeat:8.15.0
-    container_name: filebeat
-    user: root
-    volumes:
-      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
-      - ./logs:/var/log/siem:ro
-    depends_on:
-      - elasticsearch
-      - kibana
-
 volumes:
   esdata:
     driver: local

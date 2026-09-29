@@ -93,27 +93,40 @@ def tines_webhook():
     # --------------------------------------------------------
     
     try:
-        rule_name = f"Block IP {malicious_ip} from SIEM Webhook"
+        import platform
+        current_os = platform.system()
         
-        # --- MISSING PIECE 4: Prevent duplicate firewall rules ---
-        check_cmd = ["netsh", "advfirewall", "firewall", "show", "rule", f"name={rule_name}"]
-        check_result = subprocess.run(check_cmd, capture_output=True, text=True)
-        if "No rules match" not in check_result.stdout:
-            logger.info(f"Firewall rule for {malicious_ip} already exists. Skipping duplicate.")
-            return jsonify({"status": "skipped", "message": f"Rule for {malicious_ip} already exists"}), 200
-        # ---------------------------------------------------------
-        
-        # Execute netsh command to block the IP via Windows Firewall
-        # We use a list for subprocess to prevent shell injection vulnerabilities
-        command = [
-            "netsh", "advfirewall", "firewall", "add", "rule",
-            f"name={rule_name}",
-            "dir=in",
-            "action=block",
-            f"remoteip={malicious_ip}"
-        ]
-        
-        logger.info(f"Executing: {' '.join(command)}")
+        if current_os == "Windows":
+            rule_name = f"Block_SIEM_{malicious_ip}"
+            
+            # Prevent duplicate firewall rules on Windows
+            check_cmd = ["netsh", "advfirewall", "firewall", "show", "rule", f"name={rule_name}"]
+            check_result = subprocess.run(check_cmd, capture_output=True, text=True)
+            if "No rules match" not in check_result.stdout:
+                logger.info(f"Firewall rule for {malicious_ip} already exists. Skipping duplicate.")
+                return jsonify({"status": "skipped", "message": f"Rule for {malicious_ip} already exists"}), 200
+            
+            command = [
+                "netsh", "advfirewall", "firewall", "add", "rule",
+                f"name={rule_name}",
+                "dir=in",
+                "action=block",
+                f"remoteip={malicious_ip}"
+            ]
+        elif current_os == "Linux":
+            # Prevent duplicate firewall rules on Linux (iptables)
+            check_cmd = ["sudo", "iptables", "-C", "INPUT", "-s", malicious_ip, "-j", "DROP"]
+            check_result = subprocess.run(check_cmd, capture_output=True, text=True)
+            if check_result.returncode == 0:
+                logger.info(f"Firewall rule for {malicious_ip} already exists. Skipping duplicate.")
+                return jsonify({"status": "skipped", "message": f"Rule for {malicious_ip} already exists"}), 200
+                
+            command = ["sudo", "iptables", "-A", "INPUT", "-s", malicious_ip, "-j", "DROP"]
+        else:
+            logger.error(f"Unsupported OS for automated blocking: {current_os}")
+            return jsonify({"error": f"Unsupported OS: {current_os}"}), 500
+            
+        logger.info(f"Executing ({current_os}): {' '.join(command)}")
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         
         logger.info(f"Successfully blocked {malicious_ip}. Output: {result.stdout.strip()}")

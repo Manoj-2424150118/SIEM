@@ -1,5 +1,11 @@
 # Automated Threat Hunting & Incident Response Pipeline
 
+[![SIEM Pipeline Tests](https://github.com/Manoj-2424150118/SIEM/actions/workflows/ci.yml/badge.svg)](https://github.com/Manoj-2424150118/SIEM/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)
+![Elastic Stack](https://img.shields.io/badge/Elastic%20Stack-8.15.0-005571?logo=elasticsearch&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.0.0-000000?logo=flask&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white)
+
 This project implements a fully automated, closed-loop SIEM to SOAR pipeline designed for real-world environments. When an attacker attempts a brute-force or malicious action, the system automatically detects the threat, verifies the IP natively against Threat Intelligence (VirusTotal) to prevent false positives, actively blocks the attacker using Windows Firewall, and alerts the security team via Telegram/Slack/Discord.
 
 ## 🌟 Key Features
@@ -14,6 +20,58 @@ This project implements a fully automated, closed-loop SIEM to SOAR pipeline des
 
 ---
 
+## ⚡ Quick Start
+
+**Prerequisites:** Windows with Administrator rights (required to add `netsh`
+firewall rules), Python 3.10+, and Docker Desktop running.
+
+```bash
+git clone https://github.com/Manoj-2424150118/SIEM.git
+cd SIEM
+copy .env.example .env   # then fill in your keys — see the setup guide below
+```
+
+Then either double-click `start_siem.bat` (1-click: installs dependencies, starts
+the Elastic Stack, and launches the Active Defense Node), or start the pieces
+manually:
+
+```bash
+docker compose up -d        # Elasticsearch on :9200, Kibana on :5601
+pip install -r requirements.txt
+python webhook_listener.py  # Active Defense Node (Waitress) on :5001
+```
+
+- **Kibana:** <http://localhost:5601> · **Elasticsearch:** <http://localhost:9200>
+- **Webhook endpoint:** `POST /webhook` with an `x-api-key` header (see *Linking the SOAR* below)
+
+For the full walkthrough — `.env` keys, exposing the webhook with ngrok, and wiring
+up Tines — follow the **1-Click Setup Guide** further down.
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart LR
+    A[Attacker<br/>SSH brute force] --> B[Elastic Stack SIEM<br/>Elasticsearch + Kibana 8.15]
+    B -->|detection rule fires| C[Tines SOAR<br/>HTTP Request action]
+    C -->|HTTPS via ngrok tunnel| D[Active Defense Node<br/>webhook_listener.py · Waitress :5001]
+    D -->|x-api-key auth| E{VirusTotal<br/>threat-intel check}
+    E -->|malicious| F[Windows Firewall<br/>netsh block rule]
+    E -->|0 malicious hits| G[Block aborted<br/>false-positive prevention]
+    F --> H[Team alerts<br/>Telegram / Slack / Discord]
+```
+
+| Component | Role |
+| --- | --- |
+| Elastic Stack (`docker-compose.yml`) | Ingests and indexes logs; Kibana dashboards and detection rules spot the brute force |
+| Tines (SOAR) | Turns a detection into an authenticated `POST /webhook` call carrying the attacker IP |
+| `start_tunnel.py` | Exposes the local node to Tines through a secure Pyngrok tunnel |
+| `webhook_listener.py` | Validates the API key and IP, checks VirusTotal, queues concurrent block requests so `netsh` isn't overwhelmed, adds the firewall rule, and sends team alerts |
+| `attack_simulator.py` / `stress_test.py` | Generate a realistic SSH brute force, and 50 concurrent block requests, for testing |
+
+---
+
 ## 🛠️ Project Structure
 
 - `start_siem.bat`: 1-click execution script that installs dependencies, spins up Docker, and launches the Active Defense node.
@@ -21,8 +79,8 @@ This project implements a fully automated, closed-loop SIEM to SOAR pipeline des
 - `webhook_listener.py`: The core Active Defense Node that processes blocks, checks VirusTotal, and sends Team Alerts.
 - `attack_simulator.py`: Simulates SSH brute force attacks to trigger SIEM detection rules.
 - `stress_test.py`: Fires 50 concurrent authenticated requests to benchmark the server's load-handling capabilities.
-- `demo.py`: Fully automates a mock pipeline sequence for instant demonstrations.
 - `docker-compose.yml`: Local Elastic SIEM infrastructure.
+- `tests/`: pytest suite for the webhook listener and attack simulation (run in CI on every push).
 
 ---
 
@@ -74,12 +132,22 @@ When Tines triggers, it will hit your local Python server. The Python server wil
 
 ## 🧪 Testing
 
-To view a fully automated demonstration of the entire pipeline, simply run:
+Run the automated test suite (the same one CI runs on every push):
 ```bash
-python demo.py
+pip install pytest requests
+python -m pytest tests/
+```
+Some webhook tests are skipped unless you run as Administrator, since they add real
+Windows Firewall rules.
+
+Simulate an SSH brute force (Paramiko, using a real-world IoT-botnet password
+dictionary) to trigger the SIEM detection rules:
+```bash
+python attack_simulator.py --target 127.0.0.1 --user root --count 10
 ```
 
-To stress test the Active Defense Node with concurrent attacks:
+To stress test the Active Defense Node with 50 concurrent authenticated block
+requests:
 ```bash
 python stress_test.py
 ```

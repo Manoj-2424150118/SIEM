@@ -21,7 +21,7 @@ class WebhookTest(unittest.TestCase):
         # Give the server a moment to start
         time.sleep(2)
 
-    @unittest.skipIf(not ctypes.windll.shell32.IsUserAnAdmin(), "Requires Administrator privileges to modify Windows Firewall")
+    @unittest.skipIf(sys.platform != "win32" or not ctypes.windll.shell32.IsUserAnAdmin(), "Requires Windows with Administrator privileges to modify Windows Firewall")
     def test_valid_ip_blocks_firewall(self):
         """Test that sending a valid IP results in a Windows Firewall rule being added."""
         test_ip = '192.168.100.100'

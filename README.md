@@ -3,7 +3,7 @@
 [![SIEM Pipeline Tests](https://github.com/Manoj-2424150118/SIEM/actions/workflows/ci.yml/badge.svg)](https://github.com/Manoj-2424150118/SIEM/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)
 ![Elastic Stack](https://img.shields.io/badge/Elastic%20Stack-8.15.0-005571?logo=elasticsearch&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-3.0.0-000000?logo=flask&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.1.3-000000?logo=flask&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white)
 
 This project implements a fully automated, closed-loop SIEM to SOAR pipeline designed for real-world environments. When an attacker attempts a brute-force or malicious action, the system automatically detects the threat, verifies the IP natively against Threat Intelligence (VirusTotal) to prevent false positives, actively blocks the attacker using Windows Firewall, and alerts the security team via Telegram/Slack/Discord.

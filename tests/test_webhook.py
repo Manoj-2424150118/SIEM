@@ -25,7 +25,9 @@ class WebhookTest(unittest.TestCase):
     def test_valid_ip_blocks_firewall(self):
         """Test that sending a valid IP results in a Windows Firewall rule being added."""
         test_ip = '192.168.100.100'
-        rule_name = f"Block IP {test_ip} from SIEM Webhook"
+        # Must match the rule name created by webhook_listener.py (Block_SIEM_<ip>);
+        # the previous expectation used a pre-refactor name and failed on Windows CI.
+        rule_name = f"Block_SIEM_{test_ip}"
         
         try:
             # Send the payload to the webhook with auth

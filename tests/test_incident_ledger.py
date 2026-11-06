@@ -144,7 +144,7 @@ class WebhookLedgerIntegrationTest(unittest.TestCase):
             self.assertEqual(resp.status_code, 500)
             report = self.client.get("/incidents", headers=headers).get_json()
             self.assertEqual(report["totals"]["error"], 1)
-            self.assertEqual(report["incidents"][0]["decision"], "error")
+            self.assertEqual(report["incidents"][0]["action"], "error")
             self.assertEqual(report["incidents"][0]["ip"], "203.0.113.77")
 
     def test_unsupported_os_is_recorded_as_error(self):

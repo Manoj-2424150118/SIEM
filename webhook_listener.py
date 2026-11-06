@@ -145,6 +145,7 @@ def tines_webhook():
             command = ["sudo", "iptables", "-A", "INPUT", "-s", malicious_ip, "-j", "DROP"]
         else:
             logger.error(f"Unsupported OS for automated blocking: {current_os}")
+            LEDGER.record(malicious_ip, "error", detail=f"unsupported OS: {current_os}")
             return jsonify({"error": f"Unsupported OS: {current_os}"}), 500
             
         logger.info(f"Executing ({current_os}): {' '.join(command)}")
@@ -186,12 +187,14 @@ def tines_webhook():
     except subprocess.CalledProcessError as e:
         error_msg = f"stdout: {e.stdout.strip()} | stderr: {e.stderr.strip()}"
         logger.error(f"Failed to execute firewall command. Details: {error_msg}")
+        LEDGER.record(malicious_ip, "error", detail=f"firewall command failed: {error_msg}"[:300])
         return jsonify({
             "error": "Failed to update firewall rules", 
             "details": error_msg
         }), 500
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
+        LEDGER.record(malicious_ip, "error", detail=f"unexpected error: {str(e)}"[:300])
         return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/incidents', methods=['GET'])

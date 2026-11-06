@@ -126,6 +126,36 @@ class WebhookLedgerIntegrationTest(unittest.TestCase):
             self.assertEqual(run_mock.call_count, calls_after_first)
             post_mock.assert_not_called()  # and no second team alert
 
+    @staticmethod
+    def _clean_env():
+        return {k: v for k, v in os.environ.items()
+                if k not in ("VIRUSTOTAL_API_KEY", "DISCORD_WEBHOOK_URL",
+                             "SLACK_WEBHOOK_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID")}
+
+    def test_firewall_failure_is_recorded_as_error(self):
+        def failing_run(cmd, **kwargs):
+            if "-C" in cmd:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+            raise subprocess.CalledProcessError(1, cmd, output="", stderr="Permission denied")
+        headers = {"x-api-key": self.wl.API_KEY}
+        with mock.patch.dict(os.environ, self._clean_env(), clear=True), \
+             mock.patch.object(self.wl.subprocess, "run", side_effect=failing_run):
+            resp = self.client.post("/webhook", json={"ip": "203.0.113.77"}, headers=headers)
+            self.assertEqual(resp.status_code, 500)
+            report = self.client.get("/incidents", headers=headers).get_json()
+            self.assertEqual(report["totals"]["error"], 1)
+            self.assertEqual(report["incidents"][0]["decision"], "error")
+            self.assertEqual(report["incidents"][0]["ip"], "203.0.113.77")
+
+    def test_unsupported_os_is_recorded_as_error(self):
+        headers = {"x-api-key": self.wl.API_KEY}
+        with mock.patch.dict(os.environ, self._clean_env(), clear=True), \
+             mock.patch("platform.system", return_value="FreeBSD"):
+            resp = self.client.post("/webhook", json={"ip": "203.0.113.78"}, headers=headers)
+            self.assertEqual(resp.status_code, 500)
+            report = self.client.get("/incidents", headers=headers).get_json()
+            self.assertEqual(report["totals"]["error"], 1)
+
     def test_incidents_endpoint_requires_auth_and_reports(self):
         headers = {"x-api-key": self.wl.API_KEY}
         self.wl.LEDGER.record("203.0.113.5", "blocked", vt_score=12)

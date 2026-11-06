@@ -17,6 +17,7 @@ This project implements a fully automated, closed-loop SIEM to SOAR pipeline des
 5. **Secure Public Tunneling**: Automatically exposes the local node to the cloud (Tines) using a secure Pyngrok tunnel.
 6. **Native Threat Intelligence**: Directly integrates with the VirusTotal API inside the Python webhook to abort blocks on safe IPs (False Positive prevention).
 7. **Automated Team Alerts**: Dispatches rich, Markdown-formatted incident reports to Telegram, Slack, or Discord the moment an IP is successfully blocked.
+8. **Persistent Incident Ledger**: Every decision (blocked / duplicate-suppressed / VirusTotal-aborted) is recorded in an append-only JSONL ledger that survives restarts. Repeat webhooks for an IP blocked within the suppression window (default 24h, `SIEM_DEDUPE_WINDOW_HOURS`) are answered from the ledger alone — no VirusTotal quota burned, no firewall churn, no duplicate alerts — and operators can query history via the authenticated `GET /incidents` endpoint instead of grepping logs.
 
 ---
 

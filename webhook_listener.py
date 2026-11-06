@@ -9,6 +9,8 @@ import os
 import secrets
 from dotenv import load_dotenv
 
+from incident_ledger import dedupe_window_hours, ledger_from_env
+
 load_dotenv()
 
 # Initialize the Flask app
@@ -44,6 +46,13 @@ def is_valid_ip(ip):
     except ValueError:
         return False
 
+# Persistent incident ledger: the node's memory of past decisions.
+# Repeat webhooks for an IP blocked inside the suppression window are
+# answered from the ledger alone — no VirusTotal quota, no firewall
+# churn, no duplicate team alerts.
+LEDGER = ledger_from_env()
+DEDUPE_WINDOW_HOURS = dedupe_window_hours()
+
 @app.route('/webhook', methods=['POST'])
 def tines_webhook():
     # 3. Security: Authenticate the request
@@ -65,7 +74,16 @@ def tines_webhook():
         return jsonify({"error": "Invalid IP format"}), 400
         
     logger.info(f"Received authenticated request to block IP: {malicious_ip}")
-    
+
+    # --- PHASE 5.5: LEDGER SUPPRESSION ---
+    # Already blocked inside the suppression window? Answer from the
+    # ledger and stop here: no VirusTotal call, no firewall work, no
+    # second alert to the team.
+    if LEDGER.was_blocked_within(malicious_ip, DEDUPE_WINDOW_HOURS):
+        logger.info(f"Ledger: {malicious_ip} already blocked within {DEDUPE_WINDOW_HOURS}h window. Suppressing duplicate.")
+        LEDGER.record(malicious_ip, "skipped_duplicate", detail="suppressed by incident ledger")
+        return jsonify({"status": "skipped", "message": f"IP {malicious_ip} already blocked (incident ledger)"}), 200
+
     # --- PHASE 6: NATIVE THREAT INTELLIGENCE VERIFICATION ---
     vt_api_key = os.getenv("VIRUSTOTAL_API_KEY")
     if vt_api_key:
@@ -81,6 +99,7 @@ def tines_webhook():
                 malicious_score = stats.get('malicious', 0)
                 if malicious_score == 0:
                     logger.warning(f"VirusTotal reported 0 malicious hits for {malicious_ip}. Block aborted (False Positive).")
+                    LEDGER.record(malicious_ip, "aborted_safe", vt_score=0, detail="VirusTotal reported 0 malicious hits")
                     return jsonify({"status": "aborted", "message": f"IP {malicious_ip} was deemed safe by VirusTotal"}), 200
                 else:
                     logger.info(f"VirusTotal confirmed {malicious_ip} is malicious (Score: {malicious_score}). Proceeding with block.")
@@ -104,6 +123,7 @@ def tines_webhook():
             check_result = subprocess.run(check_cmd, capture_output=True, text=True)
             if "No rules match" not in check_result.stdout:
                 logger.info(f"Firewall rule for {malicious_ip} already exists. Skipping duplicate.")
+                LEDGER.record(malicious_ip, "skipped_duplicate", detail="firewall rule already exists")
                 return jsonify({"status": "skipped", "message": f"Rule for {malicious_ip} already exists"}), 200
             
             command = [
@@ -119,6 +139,7 @@ def tines_webhook():
             check_result = subprocess.run(check_cmd, capture_output=True, text=True)
             if check_result.returncode == 0:
                 logger.info(f"Firewall rule for {malicious_ip} already exists. Skipping duplicate.")
+                LEDGER.record(malicious_ip, "skipped_duplicate", detail="firewall rule already exists")
                 return jsonify({"status": "skipped", "message": f"Rule for {malicious_ip} already exists"}), 200
                 
             command = ["sudo", "iptables", "-A", "INPUT", "-s", malicious_ip, "-j", "DROP"]
@@ -130,6 +151,9 @@ def tines_webhook():
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         
         logger.info(f"Successfully blocked {malicious_ip}. Output: {result.stdout.strip()}")
+        LEDGER.record(malicious_ip, "blocked",
+                      vt_score=malicious_score if 'malicious_score' in locals() else None,
+                      detail=f"blocked via {current_os} firewall")
         
         # --- PHASE 7: AUTOMATED TEAM ALERTS ---
         discord_url = os.getenv("DISCORD_WEBHOOK_URL")
@@ -156,7 +180,8 @@ def tines_webhook():
             logger.error(f"Failed to dispatch team alert: {e}")
         # ---------------------------------------
         
-        return jsonify({"status": "success", "message": f"IP {malicious_ip} blocked via Windows Firewall"}), 200
+        firewall_label = "Windows Firewall" if current_os == "Windows" else "iptables"
+        return jsonify({"status": "success", "message": f"IP {malicious_ip} blocked via {firewall_label}"}), 200
         
     except subprocess.CalledProcessError as e:
         error_msg = f"stdout: {e.stdout.strip()} | stderr: {e.stderr.strip()}"
@@ -168,6 +193,26 @@ def tines_webhook():
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
+
+@app.route('/incidents', methods=['GET'])
+def list_incidents():
+    """Recent defense decisions from the incident ledger — the answer
+    to "what have we blocked lately?" without grepping log files.
+    Same API-key auth as the webhook."""
+    provided_key = request.headers.get('x-api-key')
+    if not provided_key or provided_key != API_KEY:
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        limit = min(max(int(request.args.get('limit', 50)), 1), 500)
+    except ValueError:
+        limit = 50
+    incidents = LEDGER.recent(limit)
+    return jsonify({
+        "count": len(incidents),
+        "totals": LEDGER.counts(),
+        "dedupe_window_hours": DEDUPE_WINDOW_HOURS,
+        "incidents": incidents,
+    }), 200
 
 if __name__ == '__main__':
     from waitress import serve

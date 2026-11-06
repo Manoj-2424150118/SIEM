@@ -5,3 +5,6 @@ __pycache__/
 .env
 INTERVIEW_GUIDE.md
 *.log
+
+# Incident ledger runtime data
+incidents.jsonl

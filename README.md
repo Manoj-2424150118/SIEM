@@ -9,7 +9,22 @@
 
 **Repository:** [github.com/Manoj-2424150118/SIEM](https://github.com/Manoj-2424150118/SIEM)
 
+<p align="center"><img src="docs/demo.gif" alt="SIEM demo — test suite, the Active Defense Node, and the incident ledger" width="860"/></p>
+
 ---
+
+## Quickstart
+
+```bash
+git clone https://github.com/Manoj-2424150118/SIEM.git
+cd SIEM
+cp .env.example .env            # then fill in your keys
+pip install -r requirements.txt
+docker compose up -d            # Elasticsearch :9200 · Kibana :5601
+python webhook_listener.py      # Active Defense Node on :5001
+```
+
+On Windows, `start_siem.bat` performs the whole sequence in one click. Full detail under [Setup & run](#setup--run).
 
 ## Overview
 
